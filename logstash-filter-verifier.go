@@ -12,9 +12,10 @@ import (
 
 	"github.com/alecthomas/kingpin"
 	"github.com/blang/semver"
+	"github.com/tetha/logstash-filter-verifier/reporting"
 	"github.com/magnusbaeck/logstash-filter-verifier/logging"
 	"github.com/magnusbaeck/logstash-filter-verifier/logstash"
-	"github.com/magnusbaeck/logstash-filter-verifier/testcase"
+	"github.com/tetha/logstash-filter-verifier/testcase"
 	"github.com/mattn/go-shellwords"
 	oplogging "github.com/op/go-logging"
 )
@@ -107,10 +108,10 @@ func findExecutable(paths []string) (string, error) {
 // slice of test cases and compares the actual events against the
 // expected set. Returns an error if at least one test case fails or
 // if there's a problem running the tests.
-func runTests(inv *logstash.Invocation, tests []testcase.TestCaseSet, diffCommand []string, keptEnvVars []string) error {
+func runTests(inv *logstash.Invocation, reporter reporting.Reporter, tests []testcase.TestCaseSet, diffCommand []string, keptEnvVars []string) error {
 	ok := true
 	for _, t := range tests {
-		fmt.Printf("Running tests in %s...\n", filepath.Base(t.File))
+		reporter.BeforeTest(filepath.Base(t.File))
 		p, err := logstash.NewProcess(inv, t.Codec, t.InputFields, keptEnvVars)
 		if err != nil {
 			return err
@@ -138,9 +139,11 @@ func runTests(inv *logstash.Invocation, tests []testcase.TestCaseSet, diffComman
 			}
 			userError("%s", message)
 		}
-		if err = t.Compare(result.Events, false, diffCommand); err != nil {
-			userError("Testcase failed, continuing with the rest: %s", err)
+		if err = t.Compare(result.Events, reporter, false, diffCommand); err != nil {
+			reporter.TestError(err)
 			ok = false
+		} else {
+			reporter.TestSuccess()
 		}
 	}
 	if !ok {
@@ -210,7 +213,7 @@ func runParallelTests(inv *logstash.Invocation, tests []testcase.TestCaseSet, di
 	}
 	ok := true
 	for i, t := range tests {
-		if err = t.Compare(result.Events[i], false, diffCommand); err != nil {
+		if err = t.Compare(result.Events[i], reporting.QuietReporter{}, false, diffCommand); err != nil {
 			userError("Testcase failed, continuing with the rest: %s", err)
 			ok = false
 		}
@@ -327,7 +330,8 @@ func mainEntrypoint() int {
 			return 1
 		}
 	} else {
-		if err = runTests(inv, tests, diffCmd, allKeptEnvVars); err != nil {
+		reporter := reporting.PrintReporter{Prefix: "tetha-test: "}
+		if err = runTests(inv, reporter, tests, diffCmd, allKeptEnvVars); err != nil {
 			userError(err.Error())
 			return 1
 		}

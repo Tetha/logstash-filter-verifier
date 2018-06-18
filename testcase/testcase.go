@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strconv"
 
+	"github.com/tetha/logstash-filter-verifier/reporting"
 	"github.com/magnusbaeck/logstash-filter-verifier/logging"
 	"github.com/magnusbaeck/logstash-filter-verifier/logstash"
 	unjson "github.com/mitchellh/packer/common/json"
@@ -170,7 +171,7 @@ func NewFromFile(path string) (*TestCaseSet, error) {
 // file and the two files are passed to "diff -u". If quiet is true,
 // the progress messages normally written to stderr will be emitted
 // and the output of the diff program will be discarded.
-func (tcs *TestCaseSet) Compare(events []logstash.Event, quiet bool, diffCommand []string) error {
+func (tcs *TestCaseSet) Compare(events []logstash.Event, reporter reporting.Reporter, quiet bool, diffCommand []string) error {
 	result := ComparisonError{
 		ActualCount:   len(events),
 		ExpectedCount: len(tcs.ExpectedEvents),
@@ -199,12 +200,14 @@ func (tcs *TestCaseSet) Compare(events []logstash.Event, quiet bool, diffCommand
 			if len(tcs.descriptions[i]) > 0 {
 				description = fmt.Sprintf(" (%s)", tcs.descriptions[i])
 			}
-			fmt.Printf("Comparing message %d of %d from %s%s...\n", i+1, len(events), filepath.Base(tcs.File), description)
+			reporter.StartCompare(i+1, len(events), filepath.Base(tcs.File), description);
 		}
 
 		for _, ignored := range tcs.IgnoredFields {
 			delete(actualEvent, ignored)
 		}
+
+		// TODO: I'm really unsure how to handle this ina reporting structure.
 
 		// Create a directory structure for the JSON file being
 		// compared that makes it easy for the user to identify
